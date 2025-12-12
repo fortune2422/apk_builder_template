@@ -6,4 +6,4 @@ services:
     repo: https://github.com/fortune2422/apk_builder_template
     branch: main
     dockerfilePath: Dockerfile
-    startCommand: sh -c "gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT backend.app:app"
+    startCommand: sh -c "gunicorn -w 1 --threads 8 --capture-output --log-level debug -b 0.0.0.0:$PORT backend.app:app"
