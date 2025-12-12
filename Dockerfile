@@ -25,4 +25,4 @@ RUN pip3 install --upgrade pip
 RUN pip3 install -r backend/requirements.txt || true
 
 EXPOSE 8000
-CMD ["python3", "backend/app.py"]
+CMD ["gunicorn", "-w", "1", "--threads", "8", "-b", "0.0.0.0:$PORT", "backend.app:app"]
