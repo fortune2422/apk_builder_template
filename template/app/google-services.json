@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "208562807884",
+    "project_id": "go606-33",
+    "storage_bucket": "go606-33.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:208562807884:android:8938ea725ef091e54e00e9",
+        "android_client_info": {
+          "package_name": "com.go606.br33"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDuLFGl9lsUOzYkPNl9ag7kQoRtaW0Hw48"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
