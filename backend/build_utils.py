@@ -7,7 +7,7 @@ import traceback
 import time
 from pathlib import Path
 
-# Optional network upload
+# Optional network upload (requests is listed in requirements)
 import requests
 
 # Configuration
@@ -33,6 +33,16 @@ def enqueue_build_task(task_meta):
     t.start()
 
 def process_build(task_meta):
+    """
+    Full build flow:
+      - copy template into working dir
+      - apply replacements (scripts.replace_vars.apply_replacements)
+      - copy google-services.json if provided
+      - run gradlew assembleRelease (with robust checks + retries)
+      - copy apk to TASK_OUTPUT_DIR
+      - optionally upload to GitHub Releases (if env vars present)
+      - record output_url.txt or error.txt in workdir
+    """
     tid = task_meta['id']
     workdir = task_meta['workdir']
     params = task_meta.get('params', {})
@@ -44,17 +54,32 @@ def process_build(task_meta):
         print(f"[{tid}] Starting build, workspace: {workdir}")
 
         build_dir = os.path.join(workdir, 'project')
+
         # Copy template project into working directory
         if not os.path.exists(TEMPLATE_DIR):
             raise FileNotFoundError(f"TEMPLATE_DIR not found: {TEMPLATE_DIR}")
+        # remove existing build_dir if any (safety)
+        if os.path.exists(build_dir):
+            try:
+                shutil.rmtree(build_dir)
+            except Exception as e:
+                print(f"[{tid}] Warning: failed to remove existing build_dir: {e}")
         shutil.copytree(TEMPLATE_DIR, build_dir)
+        print(f"[{tid}] Copied template to build_dir.")
 
         # Apply replacements (assumes scripts.replace_vars.apply_replacements exists)
         try:
             from scripts.replace_vars import apply_replacements
             apply_replacements(build_dir, params, workdir)
+            print(f"[{tid}] apply_replacements completed.")
         except Exception as e:
-            print(f"[{tid}] Warning: apply_replacements failed: {e}")
+            # don't fail yet; log warning
+            warnf = os.path.join(workdir, 'replace_warning.txt')
+            with open(warnf, 'w', encoding='utf-8') as f:
+                f.write("apply_replacements raised an exception:\n")
+                f.write(str(e) + "\n")
+                f.write(traceback.format_exc())
+            print(f"[{tid}] Warning: apply_replacements failed: {e} (written to {warnf})")
 
         # copy google-services.json if provided
         gs_src = os.path.join(workdir, 'google-services.json')
@@ -66,47 +91,147 @@ def process_build(task_meta):
             except Exception as e:
                 print(f"[{tid}] Failed to copy google-services.json: {e}")
 
-        # Prepare gradlew
+        # -------------------------
+        # Prepare gradlew and environment
+        # -------------------------
         gradlew = os.path.join(build_dir, 'gradlew')
-        if not os.path.exists(gradlew):
-            raise FileNotFoundError('gradlew not found in template project. Make sure template includes gradlew.')
-        os.chmod(gradlew, 0o755)
+
+        # make sure build_dir exists and looks sane — retry a few times if necessary
+        attempts = 0
+        while attempts < 5:
+            if os.path.exists(build_dir) and os.path.isdir(build_dir):
+                # ensure it's not empty (some copy operations may be async on certain filesystems)
+                try:
+                    entries = os.listdir(build_dir)
+                except Exception as e:
+                    entries = None
+                if entries:
+                    break
+            attempts += 1
+            print(f"[{tid}] Waiting for build_dir to become available (attempt {attempts})...")
+            time.sleep(1)
+        else:
+            # persistent failure: write diagnostics and abort
+            errf = os.path.join(workdir, 'error.txt')
+            with open(errf, 'w', encoding='utf-8') as f:
+                f.write("build_dir did not become available or was empty after waiting.\n")
+                f.write(f"build_dir path: {build_dir}\n")
+                try:
+                    f.write("TEMPLATE_DIR exists: " + str(os.path.exists(TEMPLATE_DIR)) + "\n")
+                    f.write("TEMPLATE_DIR listing:\n")
+                    for root, dirs, files in os.walk(TEMPLATE_DIR):
+                        f.write(f"{root}: {len(dirs)} dirs, {len(files)} files\n")
+                        break
+                except Exception as ee:
+                    f.write("Failed to list TEMPLATE_DIR: " + str(ee) + "\n")
+            print(f"[{tid}] ERROR: build_dir unavailable; see {errf}")
+            return
+
+        # verify gradlew exists and is a file
+        if not os.path.exists(gradlew) or not os.path.isfile(gradlew):
+            errf = os.path.join(workdir, 'error.txt')
+            with open(errf, 'w', encoding='utf-8') as f:
+                f.write("gradlew not found after copying template. Expect gradlew at: " + gradlew + "\n")
+                f.write("build_dir listing:\n")
+                try:
+                    for p in os.listdir(build_dir):
+                        f.write(" - " + p + "\n")
+                except Exception as e:
+                    f.write("Could not list build_dir: " + str(e) + "\n")
+            print(f"[{tid}] ERROR: gradlew not found. See {errf}")
+            return
+
+        # ensure gradlew is executable
+        try:
+            os.chmod(gradlew, 0o755)
+        except Exception as e:
+            print(f"[{tid}] Warning: chmod gradlew failed: {e}")
 
         env = os.environ.copy()
         if 'ANDROID_SDK_ROOT' not in env:
             env['ANDROID_SDK_ROOT'] = '/opt/android-sdk'
         if 'JAVA_HOME' not in env:
-            # common location in our Dockerfile; adjust if necessary
             env['JAVA_HOME'] = '/usr/lib/jvm/java-11-openjdk-amd64' if os.path.exists('/usr/lib/jvm/java-11-openjdk-amd64') else env.get('JAVA_HOME','')
 
-        # Run Gradle assembleRelease
-        print(f"[{tid}] Running gradle assembleRelease...")
-        try:
-            subprocess.check_call([gradlew, 'clean', 'assembleRelease'], cwd=build_dir, env=env, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-            # capture gradle error
+        # Run Gradle assembleRelease with retry on OSError (Bad file descriptor may appear as OSError)
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                print(f"[{tid}] Running gradle assembleRelease (attempt {attempt})...")
+                # Use check_call; allow the call to inherit stdout/stderr for Render logs
+                subprocess.check_call([gradlew, 'clean', 'assembleRelease'], cwd=build_dir, env=env)
+                # success -> break
+                break
+            except OSError as ose:
+                # capture and log diagnostic info; may be transient FS issue
+                diag = []
+                diag.append(f"OSError on subprocess attempt {attempt}: {str(ose)}")
+                try:
+                    diag.append("build_dir exists: " + str(os.path.exists(build_dir)))
+                    diag.append("isdir: " + str(os.path.isdir(build_dir)))
+                    diag.append("abs path: " + os.path.abspath(build_dir))
+                    diag.append("build_dir listing (first 50 entries):")
+                    try:
+                        lst = os.listdir(build_dir)
+                        for i, e in enumerate(lst):
+                            if i >= 50:
+                                diag.append("... (truncated) ...")
+                                break
+                            diag.append(f" - {e}")
+                    except Exception as le:
+                        diag.append("Could not list build_dir: " + str(le))
+                except Exception:
+                    pass
+
+                errf = os.path.join(workdir, 'error.txt')
+                with open(errf, 'a', encoding='utf-8') as f:
+                    f.write("\n".join(diag) + "\n")
+                    f.write("Traceback:\n")
+                    f.write(traceback.format_exc())
+                print(f"[{tid}] OSError when running gradle (attempt {attempt}): {ose}. See {errf}")
+                # transient wait then retry
+                time.sleep(1 + attempt)
+                continue
+            except subprocess.CalledProcessError as cpe:
+                # Gradle returned non-zero exit code — record and stop (not a Bad FD)
+                errf = os.path.join(workdir, 'error.txt')
+                with open(errf, 'w', encoding='utf-8') as f:
+                    f.write("Gradle build failed (non-zero exit):\n")
+                    f.write(str(cpe) + "\n")
+                    f.write(traceback.format_exc())
+                print(f"[{tid}] Gradle build failed (CalledProcessError). See {errf}")
+                return
+        else:
+            # all attempts exhausted
             errf = os.path.join(workdir, 'error.txt')
-            with open(errf, 'w', encoding='utf-8') as f:
-                f.write("Gradle build failed:\n")
-                f.write(str(e) + "\n")
-                f.write(traceback.format_exc())
-            print(f"[{tid}] Gradle build failed. See {errf}")
+            with open(errf, 'a', encoding='utf-8') as f:
+                f.write("All attempts to run gradlew failed with OSError. See diagnostics above.\n")
+            print(f"[{tid}] All gradle attempts failed. See {errf}")
             return
 
+        # -------------------------
         # find the produced apk
+        # -------------------------
         apk_src_dir = os.path.join(build_dir, 'app', 'build', 'outputs', 'apk', 'release')
         apk_path = None
         for p in Path(apk_src_dir).glob('*.apk'):
             apk_path = str(p)
             break
         if not apk_path:
-            raise FileNotFoundError('No APK produced in expected output path: ' + apk_src_dir)
+            errf = os.path.join(workdir, 'error.txt')
+            with open(errf, 'w', encoding='utf-8') as f:
+                f.write("No APK produced in expected output path: " + apk_src_dir + "\n")
+                f.write("Check Gradle logs above for errors.\n")
+            print(f"[{tid}] ERROR: no APK found. See {errf}")
+            return
 
         out_apk = os.path.join(TASK_OUTPUT_DIR, f'{tid}.apk')
         shutil.copy(apk_path, out_apk)
         print(f"[{tid}] APK copied to {out_apk}")
 
+        # -------------------------
         # Optionally upload to GitHub Releases if env provided
+        # -------------------------
         github_token = os.environ.get('GITHUB_TOKEN')
         github_repo = os.environ.get('GITHUB_REPO')  # format: owner/repo
         if github_token and github_repo:
@@ -178,4 +303,3 @@ def upload_apk_to_github(apk_path, repo_full, token, tag_name=None):
         raise RuntimeError(f"Failed to upload asset: {r2.status_code} {r2.text}")
     asset = r2.json()
     return asset.get("browser_download_url")
-
