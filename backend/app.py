@@ -2,7 +2,7 @@ import os
 import uuid
 import json
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
-from build_utils import enqueue_build_task, TASK_OUTPUT_DIR
+from .build_utils import enqueue_build_task, TASK_OUTPUT_DIR
 
 app = Flask(__name__)
 
