@@ -3,6 +3,7 @@ services:
     name: apk-builder-web
     env: docker
     plan: starter
-    repo: https://github.com/yourname/yourrepo
+    repo: https://github.com/fortune2422/apk_builder_template
     branch: main
     dockerfilePath: Dockerfile
+    startCommand: sh -c "gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT backend.app:app"
