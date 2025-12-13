@@ -59,12 +59,19 @@ jobs:
 
       # 6️⃣ Debug 构建（关键：防止卡死）
       - name: Build DEBUG APK
-        working-directory: template
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace --info
+      working-directory: template
+      env:
+        GRADLE_OPTS: >
+          -Dorg.gradle.daemon=false
+          -Dorg.gradle.jvmargs=-Xmx1g
+          -Dorg.gradle.workers.max=1
+          -Dkotlin.compiler.execution.strategy=in-process
+      run: |
+        chmod +x gradlew
+        ./gradlew assembleDebug \
+        --no-daemon \
+        --stacktrace \
+        --info
 
 
       # 7️⃣ 列出 APK（调试用，非常重要）
