@@ -4,8 +4,10 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // ⚠️ 稳定 + 低资源占用
+        // Android Gradle Plugin（稳定）
         classpath "com.android.tools.build:gradle:7.4.2"
+
+        // Google Services（Firebase 必须）
         classpath "com.google.gms:google-services:4.4.2"
     }
 }
@@ -15,8 +17,4 @@ allprojects {
         google()
         mavenCentral()
     }
-}
-
-task clean(type: Delete) {
-    delete rootProject.buildDir
 }
