@@ -46,13 +46,15 @@ jobs:
 
       - name: Inject build parameters
         run: |
-          echo "TASK_ID=${{ inputs.task_id }}"
-          echo "APP_NAME=${{ inputs.app_name }}"
-          echo "PACKAGE_NAME=${{ inputs.package_name }}"
-          echo "H5_URL=${{ inputs.h5_url }}"
+          mkdir -p template/app/src/main/assets
 
-          # 示例：写入本地 config（按你项目需要）
-          echo "H5_URL=${{ inputs.h5_url }}" > template/app/src/main/assets/config.env
+          cat > template/app/src/main/assets/config.env <<EOF
+          TASK_ID=${{ inputs.task_id }}
+          APP_NAME=${{ inputs.app_name }}
+          PACKAGE_NAME=${{ inputs.package_name }}
+          H5_URL=${{ inputs.h5_url }}
+          EOF
+
 
       - name: Build DEBUG APK
         working-directory: template
