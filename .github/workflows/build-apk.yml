@@ -34,16 +34,17 @@ jobs:
           echo "H5_URL=${{ inputs.h5_url }}"
           echo "APP_NAME=${{ inputs.app_name }}"
           echo "PACKAGE_NAME=${{ inputs.package_name }}"
-          # 这里调用你原来的 replace_vars 脚本
+          # TODO: 调用 scripts/replace_vars.py 或你原来的替换逻辑
 
       - name: Build APK
-      working-directory: template
+        working-directory: template
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Upload APK
+      - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.task_id }}
-          files: app/build/outputs/apk/release/*.apk
+          name: APK ${{ inputs.task_id }}
+          files: template/app/build/outputs/apk/release/*.apk
