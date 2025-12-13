@@ -58,13 +58,14 @@ jobs:
           #   --package "${{ inputs.package_name }}"
 
       # 6️⃣ Debug 构建（关键：防止卡死）
-      - name: Build DEBUG APK (SYSTEM GRADLE)
+      - name: Build DEBUG APK
         working-directory: template
         env:
-          GRADLE_OPTS: "-Xmx2g"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
         run: |
-          gradle --version
-          gradle assembleDebug --no-daemon --stacktrace
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --info
+
 
       # 7️⃣ 列出 APK（调试用，非常重要）
       - name: List APK outputs
