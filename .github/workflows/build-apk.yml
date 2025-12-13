@@ -1,4 +1,4 @@
-name: Build Android APK (DEBUG)
+name: Build APK
 
 on:
   workflow_dispatch:
@@ -13,76 +13,62 @@ on:
         description: "App Name"
         required: true
       package_name:
-        description: "Android Package Name"
+        description: "Package Name"
         required: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
-      # 1️⃣ 拉代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ 安装 JDK 17（必须）
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # 3️⃣ 安装 Android SDK（官方 Action）
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 4️⃣ 接受 Android SDK licenses（防卡死）
       - name: Accept Android SDK licenses
-        run: |
-          yes | sdkmanager --licenses || true
+        run: yes | sdkmanager --licenses
 
-      # 5️⃣ 注入参数（这里你以后可以接 replace_vars）
       - name: Inject build parameters
-        working-directory: template
         run: |
           echo "TASK_ID=${{ inputs.task_id }}"
           echo "H5_URL=${{ inputs.h5_url }}"
           echo "APP_NAME=${{ inputs.app_name }}"
           echo "PACKAGE_NAME=${{ inputs.package_name }}"
 
-          # 示例（如果你有 replace_vars.py）
-          # python3 scripts/replace_vars.py \
-          #   --h5 "${{ inputs.h5_url }}" \
-          #   --name "${{ inputs.app_name }}" \
-          #   --package "${{ inputs.package_name }}"
+          # 这里你以后可以接 replace_vars 脚本
+          # python scripts/replace_vars.py ...
 
-      # 6️⃣ Debug 构建（关键：防止卡死）
       - name: Build DEBUG APK
-      working-directory: template
-      env:
-        GRADLE_OPTS: >
-          -Dorg.gradle.daemon=false
-          -Dorg.gradle.jvmargs=-Xmx1g
-          -Dorg.gradle.workers.max=1
-          -Dkotlin.compiler.execution.strategy=in-process
-      run: |
-        chmod +x gradlew
-        ./gradlew assembleDebug \
-        --no-daemon \
-        --stacktrace \
-        --info
+        working-directory: template
+        env:
+          GRADLE_OPTS: >
+            -Dorg.gradle.daemon=false
+            -Dorg.gradle.jvmargs=-Xmx1g
+            -Dorg.gradle.workers.max=1
+            -Dkotlin.compiler.execution.strategy=in-process
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info
 
-
-      # 7️⃣ 列出 APK（调试用，非常重要）
       - name: List APK outputs
         run: |
-          ls -R template/app/build/outputs || true
+          find template -name "*.apk"
 
-      # 8️⃣ 上传 APK 到 GitHub Release
-      - name: Upload DEBUG APK to GitHub Release
+      - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.task_id }}
-          name: "DEBUG APK - ${{ inputs.task_id }}"
+          name: APK Build ${{ inputs.task_id }}
           files: template/app/build/outputs/apk/debug/*.apk
