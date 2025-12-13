@@ -4,54 +4,75 @@ on:
   workflow_dispatch:
     inputs:
       task_id:
-        description: "Task ID"
+        description: "Task ID from backend"
         required: true
+        type: string
+
       app_name:
-        description: "App Name"
+        description: "App display name"
         required: true
+        type: string
+
       package_name:
-        description: "Package Name"
+        description: "Android package name"
         required: true
+        type: string
+
       h5_url:
         description: "H5 URL"
         required: true
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 11
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 11
+          java-version: 17
 
-      - name: Setup Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Verify environment
-        run: |
-          java -version
-          ./template/gradlew --version
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
 
-      - name: Build APK
+      - name: Inject build parameters
+        run: |
+          echo "TASK_ID=${{ inputs.task_id }}"
+          echo "APP_NAME=${{ inputs.app_name }}"
+          echo "PACKAGE_NAME=${{ inputs.package_name }}"
+          echo "H5_URL=${{ inputs.h5_url }}"
+
+          # 示例：写入本地 config（按你项目需要）
+          echo "H5_URL=${{ inputs.h5_url }}" > template/app/src/main/assets/config.env
+
+      - name: Build DEBUG APK
         working-directory: template
         env:
           GRADLE_OPTS: >
             -Dorg.gradle.daemon=false
-            -Dorg.gradle.jvmargs=-Xmx1024m
+            -Dorg.gradle.jvmargs=-Xmx1g
             -Dorg.gradle.workers.max=1
             -Dkotlin.compiler.execution.strategy=in-process
         run: |
+          echo ">>> Build start: $(date)"
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace --info
+          echo ">>> Build end: $(date)"
 
-      - name: Upload APK
+      - name: List APK outputs
+        run: |
+          find template -name "*.apk"
+
+      - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.task_id }}
