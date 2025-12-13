@@ -4,10 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       task_id:
+        description: "Task ID"
         required: true
       app_name:
+        description: "App Name"
         required: true
       package_name:
+        description: "Package Name"
+        required: true
+      h5_url:
+        description: "H5 URL"
         required: true
 
 jobs:
