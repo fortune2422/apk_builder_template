@@ -38,9 +38,15 @@ jobs:
 
       - name: Build APK
         working-directory: template
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g -Dorg.gradle.workers.max=2"
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease \
+          --no-daemon \
+          --stacktrace \
+          --info \
+          --warning-mode all
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
