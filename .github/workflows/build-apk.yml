@@ -37,6 +37,7 @@ jobs:
           # 这里调用你原来的 replace_vars 脚本
 
       - name: Build APK
+      working-directory: template
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease
