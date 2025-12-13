@@ -35,6 +35,10 @@ jobs:
           echo "APP_NAME=${{ inputs.app_name }}"
           echo "PACKAGE_NAME=${{ inputs.package_name }}"
           # TODO: 调用 scripts/replace_vars.py 或你原来的替换逻辑
+          
+      - name: Accept Android SDK licenses
+        run: |
+          yes | sdkmanager --licenses || true
 
       - name: Build APK
         working-directory: template
