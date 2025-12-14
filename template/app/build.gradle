@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace "com.go606.br33"
-    compileSdk 34
+    compileSdk 33
 
     defaultConfig {
         applicationId "com.go606.br33"
         minSdk 21
-        targetSdk 34
+        targetSdk 33
         versionCode 1
         versionName "1.0"
     }
@@ -19,7 +19,6 @@ android {
         debug {
             minifyEnabled false
         }
-
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile(
@@ -29,23 +28,18 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 }
 
 dependencies {
 
-    // AndroidX 基础库
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.core:core:1.12.0'
     implementation 'androidx.core:core-ktx:1.12.0'
 
-    // Adjust SDK
-    implementation 'com.adjust.sdk:adjust-android:4.33.0'
-    implementation 'com.android.installreferrer:installreferrer:2.2'
-
-    // Firebase BoM（统一版本）
-    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    // Firebase BOM（稳定）
+    implementation platform('com.google.firebase:firebase-bom:32.7.4')
     implementation 'com.google.firebase:firebase-messaging'
 }
