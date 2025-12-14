@@ -1,4 +1,4 @@
-package com.go606.br33;
+package com.pt717.apk13;
 
 import android.content.Context;
 import android.content.Intent;
@@ -6,12 +6,37 @@ import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Message;
-import android.util.DisplayMetrics;
 import android.webkit.*;
+
 import androidx.appcompat.app.AppCompatActivity;
+
 import com.adjust.sdk.Adjust;
 
 public class MainActivity extends AppCompatActivity {
+
+    private WebView webView;
+
+    private static final String HOME_URL =
+            "https://2jjbet.com/?ch=38064&sd=6";
+
+    // ================= 生命周期 =================
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        // 系统回收兜底（防 WebView 白屏）
+        if (savedInstanceState != null) {
+            recreate();
+            return;
+        }
+
+        setContentView(R.layout.activity_main);
+        webView = findViewById(R.id.webview);
+
+        initWebView();
+        webView.loadUrl(HOME_URL);
+    }
 
     @Override
     protected void onResume() {
@@ -25,7 +50,28 @@ public class MainActivity extends AppCompatActivity {
         Adjust.onPause();
     }
 
-    // 固定字体
+    @Override
+    protected void onDestroy() {
+        if (webView != null) {
+            webView.destroy();
+            webView = null;
+        }
+        super.onDestroy();
+    }
+
+    // ================= 返回键 =================
+
+    @Override
+    public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            moveTaskToBack(true);
+        }
+    }
+
+    // ================= 字体配置 =================
+
     @Override
     public void applyOverrideConfiguration(Configuration overrideConfiguration) {
         if (overrideConfiguration != null) {
@@ -34,24 +80,20 @@ public class MainActivity extends AppCompatActivity {
         super.applyOverrideConfiguration(overrideConfiguration);
     }
 
-    // 固定显示密度
     @Override
     protected void attachBaseContext(Context newBase) {
         Configuration config = newBase.getResources().getConfiguration();
         config.fontScale = 1.0f;
-        config.densityDpi = DisplayMetrics.DENSITY_DEVICE_STABLE;
-        Context context = newBase.createConfigurationContext(config);
-        super.attachBaseContext(context);
+        super.attachBaseContext(
+                newBase.createConfigurationContext(config)
+        );
     }
 
-    @Override
-    protected void onCreate(Bundle b){
-        super.onCreate(b);
-        setContentView(R.layout.activity_main);
+    // ================= WebView 初始化 =================
 
-        final WebView w = findViewById(R.id.webview);
+    private void initWebView() {
 
-        WebSettings s = w.getSettings();
+        WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setJavaScriptCanOpenWindowsAutomatically(true);
@@ -59,169 +101,187 @@ public class MainActivity extends AppCompatActivity {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setTextZoom(100);
 
-        JsInterface jsInterface = new JsInterface(this);
-        w.addJavascriptInterface(jsInterface, "jsBridge");
+        // 永远加载最新 H5
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
 
+        webView.addJavascriptInterface(
+                new JsInterface(this), "jsBridge"
+        );
 
-        // WebViewClient：内部链接在 WebView 打开，外链使用外部 Intent
-        w.setWebViewClient(new WebViewClient() {
-            // API 21+
+        // ===== 下载监听（关键）=====
+        webView.setDownloadListener(
+                (url, userAgent, contentDisposition, mimeType, contentLength) -> {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_VIEW);
+                        i.setData(Uri.parse(url));
+                        startActivity(i);
+                    } catch (Exception ignored) {}
+                }
+        );
+
+        // ===== WebViewClient =====
+        webView.setWebViewClient(new WebViewClient() {
+
             @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                return handleUrl(view, url);
+            public boolean shouldOverrideUrlLoading(
+                    WebView view, WebResourceRequest request) {
+                return handleUrl(request.getUrl().toString());
             }
 
-            // 兼容旧版
             @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String urlRaw) {
-                if (urlRaw == null) return false;
-                return handleUrl(view, urlRaw);
+            public boolean shouldOverrideUrlLoading(
+                    WebView view, String url) {
+                return handleUrl(url);
             }
 
-            private boolean handleUrl(WebView view, String urlRaw) {
-                if (urlRaw == null) return false;
-                String url = urlRaw.trim();
+            private boolean handleUrl(String url) {
+                if (url == null) return false;
 
-                // 如果是你的 H5 域名 -> 在 WebView 内打开
-                if (url.contains("3go606.com") || url.contains("go606.com") || url.contains("1go606.com")) {
-                    // 允许 WebView 继续加载（内链）
+                // ★ 下载文件（APK 等）强制外部
+                if (isDownloadFile(url)) {
+                    openExternal(url);
+                    return true;
+                }
+
+                // 内链网页
+                if (isInnerDomain(url)) {
                     return false;
                 }
 
-                // 非内链：交给外部处理（APP scheme 优先，浏览器降级）
+                // 其他外链
                 openExternal(url);
                 return true;
             }
         });
 
-        // WebChromeClient：处理 target="_blank" / window.open()
-        w.setWebChromeClient(new WebChromeClient() {
+        // ===== WebChromeClient =====
+        webView.setWebChromeClient(new WebChromeClient() {
+
             @Override
-            public boolean onCreateWindow(WebView view, boolean isDialog,
-                                          boolean isUserGesture, Message resultMsg) {
+            public boolean onCreateWindow(WebView view,
+                                          boolean isDialog,
+                                          boolean isUserGesture,
+                                          Message resultMsg) {
 
-                // HitTestResult 有时返回图片（img src），但真实打开的 URL 往往会由新 WebView 的请求流经 shouldOverrideUrlLoading。
-                // 因此要给 newWebView 完整的 settings + client，确保能捕获目标 URL。
                 WebView newWebView = new WebView(MainActivity.this);
-
-                // 必要的设置（与主 WebView 一致）
                 WebSettings ns = newWebView.getSettings();
+
                 ns.setJavaScriptEnabled(true);
                 ns.setDomStorageEnabled(true);
-                ns.setJavaScriptCanOpenWindowsAutomatically(true);
                 ns.setSupportMultipleWindows(true);
+                ns.setJavaScriptCanOpenWindowsAutomatically(true);
                 ns.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
-                // 拦截 newWebView 的导航：如果是内链，载回主 WebView；否则走外部打开
                 newWebView.setWebViewClient(new WebViewClient() {
+
                     @Override
-                    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                        String url = request.getUrl().toString();
-                        return handleNewWebViewUrl(url);
+                    public boolean shouldOverrideUrlLoading(
+                            WebView v, WebResourceRequest r) {
+                        return handleNewUrl(r.getUrl().toString());
                     }
 
                     @Override
-                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                        return handleNewWebViewUrl(url);
+                    public boolean shouldOverrideUrlLoading(
+                            WebView v, String url) {
+                        return handleNewUrl(url);
                     }
 
-                    private boolean handleNewWebViewUrl(String url) {
+                    private boolean handleNewUrl(String url) {
                         if (url == null) return false;
-                        // 如果是图片资源（png/jpg），不要直接在浏览器打开图片（这就是你之前看到 png 的原因）
-                        // 优先尝试寻找是否为外链社媒链接 —— newWebView 通常会接到真实外链；若是图片，尝试从 parent 打开外部（避免打开图片本身）
-                        if (url.matches(".*\\.(png|jpg|jpeg)(\\?.*)?$")) {
-                            // 如果是图片资源，直接尝试打开外部（因为通常它不是最终目标）
-                            // 也可以选择在主 WebView 内显示，但更常见的是把外链交浏览器或 APP 处理
+
+                        if (isDownloadFile(url)) {
                             openExternal(url);
                             return true;
                         }
 
-                        // 如果是你的域名：在主 WebView 内打开
-                        if (url.contains("3go606.com") || url.contains("go606.com") || url.contains("1go606.com")) {
-                            // 把主 WebView 导向该 URL（在主 WebView 内打开）
-                            runOnUiThread(() -> w.loadUrl(url));
+                        if (isInnerDomain(url)) {
+                            runOnUiThread(() -> webView.loadUrl(url));
                             return true;
                         }
 
-                        // 其他域名：外部打开
                         openExternal(url);
                         return true;
                     }
                 });
 
-                // 重要：为 newWebView 设置 WebChromeClient，支持再次创建 window.open 链
                 newWebView.setWebChromeClient(new WebChromeClient());
 
-                // 将 newWebView 交给 transport（这是 window.open 的标准流程）
-                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                WebView.WebViewTransport transport =
+                        (WebView.WebViewTransport) resultMsg.obj;
                 transport.setWebView(newWebView);
                 resultMsg.sendToTarget();
                 return true;
             }
         });
-
-        // 最后加载 H5
-        w.loadUrl("https://4go606.com?ch=zdcal&sdmode=3");
     }
 
+    // ================= 外链跳转（不回弹） =================
 
-    // 外部跳转（APP 优先）
     private void openExternal(String url) {
-
         if (url == null || url.isEmpty()) return;
 
-        // APP 优先：将网页链接转成对应 APP Scheme
         String appUrl = buildAppLink(url);
 
-        // try app scheme first
         try {
-            Intent appIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(appUrl));
+            Intent appIntent =
+                    new Intent(Intent.ACTION_VIEW, Uri.parse(appUrl));
             appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(appIntent);
-            return;
+
+            if (appIntent.resolveActivity(getPackageManager()) != null) {
+                startActivity(appIntent);
+                moveTaskToBack(true);
+                return;
+            }
         } catch (Exception ignored) {}
 
-        // fallback to browser
         try {
-            Intent webIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            Intent webIntent =
+                    new Intent(Intent.ACTION_VIEW, Uri.parse(url));
             webIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(webIntent);
         } catch (Exception ignored) {}
     }
 
-    // 转换 APP Scheme（尽量打开原生 App）
+    // ================= 判断方法 =================
+
+    private boolean isInnerDomain(String url) {
+        return url.contains("10jjbet.com")
+                || url.contains("go606.com")
+                || url.contains("1go606.com")
+                || url.contains("3go606.com")
+                || url.contains("4go606.com");
+    }
+
+    private boolean isDownloadFile(String url) {
+        String u = url.toLowerCase();
+        return u.endsWith(".apk")
+                || u.endsWith(".zip")
+                || u.endsWith(".rar")
+                || u.endsWith(".pdf");
+    }
+
     private String buildAppLink(String url) {
 
-        if (url == null) return url;
-
-        // Telegram
         if (url.contains("t.me/")) {
-            String user = url.substring(url.lastIndexOf("/") + 1);
-            return "tg://resolve?domain=" + user;
+            String u = url.substring(url.lastIndexOf("/") + 1);
+            return "tg://resolve?domain=" + u;
         }
 
-        // Facebook
         if (url.contains("facebook.com/")) {
-            // fb scheme 会打开 facebook app 页面（如果安装）
             return "fb://facewebmodal/f?href=" + url;
         }
 
-        // Instagram
         if (url.contains("instagram.com/")) {
-            String user = url.substring(url.indexOf(".com/") + 5).split("[/?]")[0];
-            return "instagram://user?username=" + user;
+            String u = url.substring(url.indexOf(".com/") + 5)
+                    .split("[/?]")[0];
+            return "instagram://user?username=" + u;
         }
 
-        // WhatsApp Channel（无稳定 scheme 可用）
-        if (url.contains("whatsapp.com/channel/")) {
-            return url;
-        }
-
-        // X / Twitter
-        if (url.contains("x.com/") || url.contains("twitter.com/")) {
-            String user = url.substring(url.lastIndexOf("/") + 1).split("\\?")[0];
-            return "twitter://user?screen_name=" + user;
+        if (url.contains("twitter.com/")
+                || url.contains("x.com/")) {
+            String u = url.substring(url.lastIndexOf("/") + 1)
+                    .split("\\?")[0];
+            return "twitter://user?screen_name=" + u;
         }
 
         return url;
