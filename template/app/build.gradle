@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.example.app'
+    namespace "com.go606.br33"
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.app"
+        applicationId "com.go606.br33"
         minSdk 21
         targetSdk 34
         versionCode 1
@@ -19,10 +19,11 @@ android {
         debug {
             minifyEnabled false
         }
+
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile(
-                    'proguard-android-optimize.txt'
+                'proguard-android-optimize.txt'
             ), 'proguard-rules.pro'
         }
     }
@@ -34,14 +35,17 @@ android {
 }
 
 dependencies {
+
+    // AndroidX 基础库
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core:1.12.0'
     implementation 'androidx.core:core-ktx:1.12.0'
 
-    // Firebase BoM（推荐）
-    implementation platform('com.google.firebase:firebase-bom:33.1.2')
-    implementation 'com.google.firebase:firebase-messaging'
-
-    // Adjust（如果你需要）
+    // Adjust SDK
     implementation 'com.adjust.sdk:adjust-android:4.33.0'
     implementation 'com.android.installreferrer:installreferrer:2.2'
+
+    // Firebase BoM（统一版本）
+    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    implementation 'com.google.firebase:firebase-messaging'
 }
