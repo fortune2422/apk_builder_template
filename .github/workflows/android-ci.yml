@@ -44,8 +44,18 @@ jobs:
 
       - name: Build Debug APK
         working-directory: template
-        timeout-minutes: 10
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        timeout-minutes: 25
+        env:
+          GRADLE_OPTS: >
+            -Dorg.gradle.jvmargs="-Xmx2g -Dfile.encoding=UTF-8"
+        run: |
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            --console=plain \
+            --warning-mode=all
+
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
