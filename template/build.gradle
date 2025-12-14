@@ -4,8 +4,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // Android Gradle Plugin（和 Gradle 7.6.1 完全兼容）
-        classpath "com.android.tools.build:gradle:7.4.2"
+        // ⚠️ 锁死这个版本
+        classpath "com.android.tools.build:gradle:7.3.1"
 
         // Firebase / Google Services
         classpath "com.google.gms:google-services:4.4.2"
